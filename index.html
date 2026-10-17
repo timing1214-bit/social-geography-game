@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>세계 지형 탐험 슈팅 게임 (사회 수업용)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #030712;
+            color: #ffffff;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        #gameCanvas {
+            background: radial-gradient(circle at center, #0b132b 0%, #030712 100%);
+            display: block;
+            width: 100%;
+            height: 100vh;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .neon-border-blue {
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5), inset 0 0 15px rgba(59, 130, 246, 0.2);
+        }
+
+        .neon-border-green {
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.5), inset 0 0 15px rgba(34, 197, 94, 0.2);
+        }
+
+        .pulse-glow {
+            animation: pulseGlow 2s infinite alternate;
+        }
+
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 10px rgba(59, 130, 246, 0.4); }
+            100% { box-shadow: 0 0 25px rgba(59, 130, 246, 0.9); }
+        }
+
+        /* Animated grid background effect */
+        .grid-bg {
+            background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* Custom Scrollbar for review modal */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen overflow-hidden grid-bg relative">
+
+    <!-- Canvas for Main Game Rendering -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Top HUD: Question & Game Info -->
+    <div id="hudPanel" class="fixed top-2 left-1/2 -translate-x-1/2 w-[96%] max-w-4xl z-20 pointer-events-none transition-all duration-300">
+        <div class="glass-panel rounded-2xl p-3 md:p-4 text-center neon-border-blue flex flex-col gap-2">
+            
+            <!-- Top Stats Bar -->
+            <div class="flex justify-between items-center text-xs md:text-sm font-semibold px-2">
+                <!-- Level Indicator -->
+                <div class="flex items-center gap-2 text-cyan-400 font-orbitron">
+                    <i class="fa-solid fa-earth-americas"></i>
+                    <span>STAGE <span id="currentLevel">1</span>/<span id="totalLevels">10</span></span>
+                </div>
+
+                <!-- Combo Multiplier -->
+                <div class="flex items-center gap-1 text-yellow-400 font-orbitron text-sm md:text-base">
+                    <i class="fa-solid fa-bolt animate-bounce"></i>
+                    <span>COMBO <span id="comboText">0</span>x</span>
+                </div>
+
+                <!-- Score -->
+                <div class="flex items-center gap-2 text-emerald-400 font-orbitron text-sm md:text-lg">
+                    <i class="fa-solid fa-trophy"></i>
+                    <span id="scoreText">0</span> 점
+                </div>
+
+                <!-- Lives -->
+                <div class="flex items-center gap-1 text-red-500" id="livesContainer">
+                    <i class="fa-solid fa-heart text-base md:text-lg"></i>
+                    <i class="fa-solid fa-heart text-base md:text-lg"></i>
+                    <i class="fa-solid fa-heart text-base md:text-lg"></i>
+                </div>
+            </div>
+
+            <!-- Question Box -->
+            <div class="bg-slate-900/80 rounded-xl p-2.5 md:p-3 border border-cyan-500/30 flex items-center justify-center min-h-[52px]">
+                <p id="questionText" class="text-sm md:text-lg font-bold text-white tracking-wide leading-relaxed">
+                    질문을 로딩 중입니다...
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Feedback Message (+100 / -50) -->
+    <div id="feedbackContainer" class="fixed inset-0 pointer-events-none z-30 overflow-hidden"></div>
+
+    <!-- Controls Overlay (Mobile Touch Controls) -->
+    <div id="touchControls" class="fixed bottom-4 left-0 right-0 z-20 flex justify-between items-center px-6 md:hidden pointer-events-none opacity-80">
+        <div class="flex gap-3 pointer-events-auto">
+            <button id="btnLeft" class="w-14 h-14 glass-panel rounded-full text-2xl text-cyan-400 active:scale-95 flex items-center justify-center border border-cyan-500/50">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <button id="btnRight" class="w-14 h-14 glass-panel rounded-full text-2xl text-cyan-400 active:scale-95 flex items-center justify-center border border-cyan-500/50">
+                <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>
+        <div class="pointer-events-auto">
+            <button id="btnShoot" class="w-16 h-16 bg-red-600/80 text-white rounded-full text-xl font-bold active:scale-95 flex items-center justify-center shadow-lg shadow-red-500/50 border border-red-400">
+                <i class="fa-solid fa-crosshairs"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Pause / Audio Control Buttons -->
+    <div class="fixed top-3 right-3 z-30 flex gap-2">
+        <button id="btnSound" class="glass-panel w-10 h-10 rounded-xl text-slate-300 hover:text-white flex items-center justify-center transition hover:bg-slate-800">
+            <i class="fa-solid fa-volume-high" id="soundIcon"></i>
+        </button>
+        <button id="btnPause" class="glass-panel w-10 h-10 rounded-xl text-slate-300 hover:text-white flex items-center justify-center transition hover:bg-slate-800">
+            <i class="fa-solid fa-pause" id="pauseIcon"></i>
+        </button>
+    </div>
+
+    <!-- Start Overlay Modal -->
+    <div id="startModal" class="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+        <div class="glass-panel max-w-lg w-full rounded-3xl p-6 md:p-8 text-center neon-border-blue relative flex flex-col items-center">
+            <div class="w-20 h-20 bg-cyan-500/10 rounded-2xl flex items-center justify-center border border-cyan-400/40 mb-4 pulse-glow">
+                <i class="fa-solid fa-shuttle-space text-4xl text-cyan-400"></i>
+            </div>
+
+            <h1 class="text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 mb-2">
+                세계 지형 탐험 슈팅
+            </h1>
+            <p class="text-xs md:text-sm text-slate-300 mb-6 font-medium">
+                [사회 수업용] 우주선을 조종하여 질문에 맞는 올바른 정답 단어를 적중시키세요!
+            </p>
+
+            <div class="bg-slate-900/80 rounded-2xl p-4 text-left w-full text-xs md:text-sm space-y-2 mb-6 border border-slate-700">
+                <p class="font-bold text-cyan-300 text-center mb-1">🎮 조작 및 규칙 안내</p>
+                <div class="flex items-center gap-2 text-slate-300">
+                    <span class="bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded font-mono text-xs">방향키 / A,D</span>
+                    <span>또는 화면 드래그로 우주선 이동</span>
+                </div>
+                <div class="flex items-center gap-2 text-slate-300">
+                    <span class="bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded font-mono text-xs">스페이스바</span>
+                    <span>또는 터치로 발사 (자동 발사 지원)</span>
+                </div>
+                <div class="flex items-center gap-2 text-emerald-400 font-medium">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>정답 명중: 점수 획득 (+100) 및 콤보 보너스</span>
+                </div>
+                <div class="flex items-center gap-2 text-red-400 font-medium">
+                    <i class="fa-solid fa-circle-xmark"></i>
+                    <span>오답 명중: 점수 감점 (-50) 및 콤보 초기화</span>
+                </div>
+            </div>
+
+            <button id="btnStartGame" class="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-lg rounded-2xl shadow-lg shadow-cyan-500/30 transition transform hover:scale-[1.02] active:scale-95">
+                탐험 시작하기 <i class="fa-solid fa-rocket ml-2"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Over / Victory Modal -->
+    <div id="resultModal" class="fixed inset-0 z-40 hidden flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+        <div class="glass-panel max-w-lg w-full rounded-3xl p-6 md:p-8 text-center neon-border-blue relative flex flex-col items-center">
+            
+            <div id="resultBadge" class="w-20 h-20 bg-yellow-500/10 rounded-2xl flex items-center justify-center border border-yellow-400/40 mb-3">
+                <i id="resultIcon" class="fa-solid fa-trophy text-4xl text-yellow-400"></i>
+            </div>
+
+            <h2 id="resultTitle" class="text-2xl md:text-3xl font-black text-white mb-1">탐험 완료!</h2>
+            <p id="resultSubtitle" class="text-xs md:text-sm text-slate-300 mb-4">모든 세계 지형 문제를 완수했습니다.</p>
+
+            <!-- Score Stats Grid -->
+            <div class="grid grid-cols-2 gap-3 w-full mb-4">
+                <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-700/60 text-center">
+                    <p class="text-xs text-slate-400">최종 점수</p>
+                    <p id="finalScore" class="text-xl md:text-2xl font-black text-emerald-400 font-orbitron">0</p>
+                </div>
+                <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-700/60 text-center">
+                    <p class="text-xs text-slate-400">정답률</p>
+                    <p id="finalAccuracy" class="text-xl md:text-2xl font-black text-cyan-400 font-orbitron">0%</p>
+                </div>
+            </div>
+
+            <!-- Review Section -->
+            <div class="w-full text-left mb-5">
+                <p class="text-xs font-bold text-slate-400 mb-2">📋 학습 결과 요약</p>
+                <div id="reviewList" class="max-h-36 overflow-y-auto bg-slate-900/90 rounded-xl p-3 border border-slate-800 space-y-2 text-xs">
+                    <!-- Dynamic review items inserted here -->
+                </div>
+            </div>
+
+            <button id="btnRestartGame" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-base rounded-2xl shadow-lg shadow-emerald-500/30 transition transform hover:scale-[1.02] active:scale-95">
+                다시 도전하기 <i class="fa-solid fa-rotate-right ml-2"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Pause Screen Modal -->
+    <div id="pauseModal" class="fixed inset-0 z-30 hidden flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
+        <div class="glass-panel max-w-sm w-full rounded-2xl p-6 text-center border border-cyan-500/30">
+            <h3 class="text-xl font-bold text-white mb-2">일시 정지</h3>
+            <p class="text-xs text-slate-300 mb-6">게임이 잠시 멈추었습니다.</p>
+            <button id="btnResumeGame" class="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition">
+                게임 계속하기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // =========================================================================
+        // [사회 수업용 질문 및 보기 목록] - 파일 맨 위에서 자유롭게 편집/추가 가능합니다!
+        // =========================================================================
+        const QUIZ_DATA = [
+            {
+                question: "세계에서 가장 높은 산맥으로, 에베레스트산이 위치한 곳은?",
+                correct: "히말라야 산맥",
+                wrongs: ["안데스 산맥", "알프스 산맥", "로키 산맥", "우랄 산맥"]
+            },
+            {
+                question: "남아메리카 서쪽 해안을 따라 길게 뻗어 있는 세계 최장의 산맥은?",
+                correct: "안데스 산맥",
+                wrongs: ["히말라야 산맥", "알프스 산맥", "아틀라스 산맥", "스칸디나비아 산맥"]
+            },
+            {
+                question: "세계에서 가장 크고 건조한 북아프리카의 열대 사막은?",
+                correct: "사하라 사막",
+                wrongs: ["고비 사막", "아타카마 사막", "나미브 사막", "빅토리아 사막"]
+            },
+            {
+                question: "하천 하구에 토사가 쌓여 형상화된 삼각형 모양의 지형은?",
+                correct: "삼각주",
+                wrongs: ["선상지", "범람원", "해안단구", "석호"]
+            },
+            {
+                question: "빙하 침식으로 생긴 U자곡에 바닷물이 들어와 형성된 좁고 깊은 만은?",
+                correct: "피오르",
+                wrongs: ["리어스 해안", "석호", "해식애", "사주"]
+            },
+            {
+                question: "유럽 대륙 중앙에 위치하며 아름다운 고산 풍경으로 유명한 산맥은?",
+                correct: "알프스 산맥",
+                wrongs: ["우랄 산맥", "피레네 산맥", "카르파티아 산맥", "아펜니노 산맥"]
+            },
+            {
+                question: "석회암이 물에 녹는 용식 작용으로 만들어진 지형(탑카르스트, 종유동 등)은?",
+                correct: "카르스트 지형",
+                wrongs: ["화산 지형", "빙하 지형", "건조 지형", "해안 지형"]
+            },
+            {
+                question: "세계에서 유량이 가장 많으며 풍부한 열대 우림을 가진 남아메리카의 강은?",
+                correct: "아마존강",
+                wrongs: ["나일강", "미시시피강", "양쯔강", "콩고강"]
+            },
+            {
+                question: "아프리카 동부에 위치하며 대륙 판이 갈라지면서 형성된 거대한 단층 골짜기는?",
+                correct: "동아프리카 지구대",
+                wrongs: ["그랜드 캐니언", "마리아나 해구", "산안드레아스 단층", "중앙해령"]
+            },
+            {
+                question: "바람에 의해 모래가 이동하고 쌓여서 만들어진 모래언덕은?",
+                correct: "사구",
+                wrongs: ["삼각주", "메사", "오아시스", "선상지"]
+            }
+        ];
+
+        // Web Audio API Audio Synthesizer for SFX
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) this.ctx = new AudioContext();
+                }
+            }
+
+            playShoot() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.12);
+            }
+
+            playCorrect() {
+                if (this.muted || !this.ctx) return;
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.08);
+                    gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.08 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + idx * 0.08);
+                    osc.stop(this.ctx.currentTime + idx * 0.08 + 0.25);
+                });
+            }
+
+            playWrong() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(160, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(110, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+
+            playHit() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+        }
+
+        const sound = new SoundFX();
+
+        // Canvas & Context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game state
+        let isPlaying = false;
+        let isPaused = false;
+        let currentQuestionIdx = 0;
+        let score = 0;
+        let combo = 0;
+        let lives = 3;
+        let totalAnswered = 0;
+        let correctAnswersCount = 0;
+        let historyLog = []; // Stores question review stats
+
+        // Animation frame ID
+        let animFrameId = null;
+        let lastTime = 0;
+
+        // Space Background Stars
+        let stars = [];
+
+        // Entities
+        let player;
+        let bullets = [];
+        let enemies = [];
+        let particles = [];
+
+        // Input handling state
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            ArrowUp: false,
+            ArrowDown: false,
+            KeyA: false,
+            KeyD: false,
+            KeyW: false,
+            KeyS: false,
+            Space: false
+        };
+
+        let touchX = null;
+        let lastAutoShoot = 0;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (player) {
+                player.y = canvas.height - 80;
+            }
+        }
+
+        function initStarfield() {
+            stars = [];
+            const count = Math.floor((canvas.width * canvas.height) / 3000);
+            for (let i = 0; i < count; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radius: Math.random() * 1.5 + 0.5,
+                    speed: Math.random() * 0.8 + 0.2,
+                    alpha: Math.random() * 0.8 + 0.2
+                });
+            }
+        }
+
+        function updateStars() {
+            stars.forEach(star => {
+                star.y += star.speed;
+                if (star.y > canvas.height) {
+                    star.y = 0;
+                    star.x = Math.random() * canvas.width;
+                }
+            });
+        }
+
+        function drawStars() {
+            ctx.save();
+            stars.forEach(star => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+        }
+
+        class Player {
+            constructor() {
+                this.width = 44;
+                this.height = 48;
+                this.x = canvas.width / 2;
+                this.y = canvas.height - 90;
+                this.speed = 7;
+                this.lastShot = 0;
+                this.shotDelay = 220; // ms between shots
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Engine Trail Glow
+                const engineGradient = ctx.createRadialGradient(0, 22, 2, 0, 28, 14);
+                engineGradient.addColorStop(0, 'rgba(56, 189, 248, 1)');
+                engineGradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.8)');
+                engineGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = engineGradient;
+                ctx.beginPath();
+                ctx.arc(0, 22, 14, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Spaceship Body Shape (SVG style vector path)
+                ctx.fillStyle = '#0f172a';
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2.5;
+
+                ctx.beginPath();
+                ctx.moveTo(0, -24); // Nose
+                ctx.lineTo(16, 16); // Right wing tip
+                ctx.lineTo(6, 18);  // Right engine
+                ctx.lineTo(0, 12);  // Center back
+                ctx.lineTo(-6, 18); // Left engine
+                ctx.lineTo(-16, 16); // Left wing tip
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Cockpit Shield Glow
+                ctx.fillStyle = '#22d3ee';
+                ctx.beginPath();
+                ctx.ellipse(0, -4, 5, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            update() {
+                // Movement via Keyboard
+                if (keys.ArrowLeft || keys.KeyA) this.x -= this.speed;
+                if (keys.ArrowRight || keys.KeyD) this.x += this.speed;
+                if (keys.ArrowUp || keys.KeyW) this.y -= this.speed * 0.7;
+                if (keys.ArrowDown || keys.KeyS) this.y += this.speed * 0.7;
+
+                // Mobile Touch movement smoothing
+                if (touchX !== null) {
+                    const dx = touchX - this.x;
+                    this.x += dx * 0.15;
+                }
+
+                // Screen boundaries
+                const padding = this.width / 2 + 10;
+                this.x = Math.max(padding, Math.min(canvas.width - padding, this.x));
+                this.y = Math.max(120, Math.min(canvas.height - 60, this.y));
+            }
+
+            shoot(now) {
+                if (now - this.lastShot >= this.shotDelay) {
+                    bullets.push(new Bullet(this.x, this.y - 20));
+                    sound.playShoot();
+                    this.lastShot = now;
+                }
+            }
+        }
+
+        class Bullet {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.speed = 12;
+                this.radius = 4;
+            }
+
+            update() {
+                this.y -= this.speed;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#38bdf8';
+                ctx.fillStyle = '#7dd3fc';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class Enemy {
+            constructor(text, isCorrect, x, speed) {
+                this.text = text;
+                this.isCorrect = isCorrect;
+                this.x = x;
+                this.y = -40;
+                this.speed = speed;
+                this.radius = 38;
+                this.angle = Math.random() * Math.PI * 2;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.02;
+
+                // Random subtle horizontal drift (halved for smoother slow movement)
+                this.vx = (Math.random() - 0.5) * 0.3;
+            }
+
+            update() {
+                this.y += this.speed;
+                this.x += this.vx;
+                this.angle += this.rotationSpeed;
+
+                // Bounce off canvas walls horizontally
+                if (this.x - this.radius < 10 || this.x + this.radius > canvas.width - 10) {
+                    this.vx *= -1;
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Target Body Outer Ring Glow
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = '#3b82f6';
+                
+                // Outer Hexagon / Circle Base
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.strokeStyle = '#60a5fa';
+                ctx.lineWidth = 2.5;
+
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Inner Accent Line
+                ctx.strokeStyle = 'rgba(147, 197, 253, 0.3)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius - 6, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Enemy Text Label
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 13px "Noto Sans KR", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Word Wrapping or Font fit
+                const textWidth = ctx.measureText(this.text).width;
+                if (textWidth > this.radius * 1.7) {
+                    ctx.font = 'bold 11px "Noto Sans KR", sans-serif';
+                }
+
+                ctx.fillText(this.text, 0, 0);
+
+                ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = Math.random() * 3 + 1;
+                this.vx = (Math.random() - 0.5) * 8;
+                this.vy = (Math.random() - 0.5) * 8;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.03 + 0.015;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= this.decay;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function spawnEnemiesForCurrentQuestion() {
+            enemies = [];
+            const qData = QUIZ_DATA[currentQuestionIdx];
+            if (!qData) return;
+
+            // Combine correct answer and 3-4 wrong answers
+            const wrongPool = [...qData.wrongs];
+            // Shuffle wrong options
+            wrongPool.sort(() => Math.random() - 0.5);
+            const selectedWrongs = wrongPool.slice(0, 3);
+
+            const options = [
+                { text: qData.correct, isCorrect: true },
+                ...selectedWrongs.map(w => ({ text: w, isCorrect: false }))
+            ];
+
+            // Shuffle options for random position ordering
+            options.sort(() => Math.random() - 0.5);
+
+            // Calculate evenly spaced horizontal lanes
+            const count = options.length;
+            const laneWidth = canvas.width / (count + 1);
+
+            options.forEach((opt, idx) => {
+                const posX = laneWidth * (idx + 1) + (Math.random() * 20 - 10);
+                // Speed reduced by half (2x slower) for student reading & thinking time
+                const speed = (1.0 + Math.min(2.0, currentQuestionIdx * 0.15) + Math.random() * 0.3) * 0.5;
+                enemies.push(new Enemy(opt.text, opt.isCorrect, posX, speed));
+            });
+
+            // Update Level HUD Text
+            document.getElementById('currentLevel').innerText = currentQuestionIdx + 1;
+            document.getElementById('totalLevels').innerText = QUIZ_DATA.length;
+            document.getElementById('questionText').innerText = qData.question;
+        }
+
+        function createExplosion(x, y, color, count = 20) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        function showFeedback(text, colorClass, x, y) {
+            const container = document.getElementById('feedbackContainer');
+            const el = document.createElement('div');
+            el.className = `absolute font-black text-lg md:text-2xl transition-all duration-700 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none ${colorClass}`;
+            el.innerText = text;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+
+            container.appendChild(el);
+
+            requestAnimationFrame(() => {
+                el.style.transform = 'translate(-50%, -80px) scale(1.2)';
+                el.style.opacity = '0';
+            });
+
+            setTimeout(() => {
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }, 750);
+        }
+
+        function updateHUD() {
+            document.getElementById('scoreText').innerText = score;
+            document.getElementById('comboText').innerText = combo;
+
+            // Render Lives Hearts
+            const livesContainer = document.getElementById('livesContainer');
+            livesContainer.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const heart = document.createElement('i');
+                if (i < lives) {
+                    heart.className = 'fa-solid fa-heart text-base md:text-lg text-red-500 animate-pulse';
+                } else {
+                    heart.className = 'fa-solid fa-heart text-base md:text-lg text-slate-700';
+                }
+                livesContainer.appendChild(heart);
+            }
+        }
+
+        function advanceNextQuestion(wasCorrect, selectedText = '') {
+            totalAnswered++;
+            if (wasCorrect) {
+                correctAnswersCount++;
+            }
+
+            // Log history
+            const currentQ = QUIZ_DATA[currentQuestionIdx];
+            historyLog.push({
+                question: currentQ.question,
+                correctAnswer: currentQ.correct,
+                userSelected: selectedText,
+                isCorrect: wasCorrect
+            });
+
+            currentQuestionIdx++;
+
+            if (currentQuestionIdx >= QUIZ_DATA.length || lives <= 0) {
+                endGame();
+            } else {
+                // Clear remaining enemies and spawn new set
+                enemies.forEach(e => createExplosion(e.x, e.y, '#38bdf8', 8));
+                setTimeout(() => {
+                    spawnEnemiesForCurrentQuestion();
+                }, 400);
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (!isPlaying || isPaused) return;
+
+            const now = timestamp || performance.now();
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update Starfield
+            updateStars();
+            drawStars();
+
+            // Auto Shoot handling for touchscreen or held Space
+            if (keys.Space || touchX !== null) {
+                player.shoot(now);
+            }
+
+            // Update & Draw Player
+            player.update();
+            player.draw();
+
+            // Update & Draw Bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.update();
+                b.draw();
+
+                if (b.y < -20) {
+                    bullets.splice(i, 1);
+                }
+            }
+
+            // Update & Draw Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw();
+                if (p.alpha <= 0) particles.splice(i, 1);
+            }
+
+            // Update & Draw Enemies & Collision Checking
+            let questionSolvedInThisFrame = false;
+
+            for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
+                const enemy = enemies[eIdx];
+                enemy.update();
+                enemy.draw();
+
+                // Check bullet collisions
+                for (let bIdx = bullets.length - 1; bIdx >= 0; bIdx--) {
+                    const bullet = bullets[bIdx];
+                    const dist = Math.hypot(enemy.x - bullet.x, enemy.y - bullet.y);
+
+                    if (dist < enemy.radius + bullet.radius) {
+                        // Bullet hit enemy!
+                        bullets.splice(bIdx, 1);
+
+                        if (enemy.isCorrect) {
+                            // CORRECT ANSWER HIT!
+                            combo++;
+                            const gain = 100 + (combo - 1) * 20;
+                            score += gain;
+                            sound.playCorrect();
+                            createExplosion(enemy.x, enemy.y, '#10b981', 35);
+                            showFeedback(`+${gain} 정답! 🎯`, 'text-emerald-400 font-bold', enemy.x, enemy.y);
+
+                            questionSolvedInThisFrame = true;
+                            advanceNextQuestion(true, enemy.text);
+                            break;
+                        } else {
+                            // WRONG ANSWER HIT!
+                            combo = 0;
+                            score = Math.max(0, score - 50);
+                            sound.playWrong();
+                            createExplosion(enemy.x, enemy.y, '#ef4444', 25);
+                            showFeedback('-50 오답! ❌', 'text-red-400 font-bold', enemy.x, enemy.y);
+
+                            // Remove wrong enemy from screen
+                            enemies.splice(eIdx, 1);
+                            break;
+                        }
+                    }
+                }
+
+                if (questionSolvedInThisFrame) break;
+
+                // Check if enemy reaches bottom edge
+                if (enemy.y > canvas.height + enemy.radius) {
+                    if (enemy.isCorrect) {
+                        // Correct answer was missed!
+                        sound.playHit();
+                        lives--;
+                        combo = 0;
+                        showFeedback('놓침! 💔', 'text-amber-400 font-bold', enemy.x, canvas.height - 100);
+                        questionSolvedInThisFrame = true;
+                        advanceNextQuestion(false, '놓침');
+                        break;
+                    } else {
+                        // Simply remove wrong answer target off screen
+                        enemies.splice(eIdx, 1);
+                    }
+                }
+            }
+
+            updateHUD();
+
+            animFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            sound.init();
+            isPlaying = true;
+            isPaused = false;
+            currentQuestionIdx = 0;
+            score = 0;
+            combo = 0;
+            lives = 3;
+            totalAnswered = 0;
+            correctAnswersCount = 0;
+            historyLog = [];
+            bullets = [];
+            enemies = [];
+            particles = [];
+
+            player = new Player();
+
+            document.getElementById('startModal').classList.add('hidden');
+            document.getElementById('resultModal').classList.add('hidden');
+            document.getElementById('pauseModal').classList.add('hidden');
+
+            updateHUD();
+            spawnEnemiesForCurrentQuestion();
+
+            cancelAnimationFrame(animFrameId);
+            animFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            isPlaying = false;
+            cancelAnimationFrame(animFrameId);
+
+            const accuracy = totalAnswered > 0 ? Math.round((correctAnswersCount / QUIZ_DATA.length) * 100) : 0;
+
+            document.getElementById('finalScore').innerText = score;
+            document.getElementById('finalAccuracy').innerText = `${accuracy}%`;
+
+            // Setup Badge and Title
+            const badge = document.getElementById('resultBadge');
+            const icon = document.getElementById('resultIcon');
+            const title = document.getElementById('resultTitle');
+            const subtitle = document.getElementById('resultSubtitle');
+
+            if (lives > 0 && accuracy >= 80) {
+                icon.className = 'fa-solid fa-crown text-4xl text-yellow-400';
+                title.innerText = '세계 지형 마스터! 🏆';
+                subtitle.innerText = '훌륭합니다! 세계의 지형 지식을 완벽하게 숙지했습니다.';
+            } else if (lives > 0) {
+                icon.className = 'fa-solid fa-medal text-4xl text-cyan-400';
+                title.innerText = '지형 탐험 성공!';
+                subtitle.innerText = '모든 문제를 마쳤습니다. 조금 더 연습하여 만점에 도전해보세요!';
+            } else {
+                icon.className = 'fa-solid fa-heart-crack text-4xl text-red-400';
+                title.innerText = '탐험 실패!';
+                subtitle.innerText = '에너지가 모두 소진되었습니다. 다시 도전해보세요.';
+            }
+
+            // Render Review Items
+            const reviewList = document.getElementById('reviewList');
+            reviewList.innerHTML = '';
+            historyLog.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = `p-2 rounded-lg border ${item.isCorrect ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-200' : 'bg-red-950/40 border-red-700/50 text-red-200'}`;
+                div.innerHTML = `
+                    <p class="font-bold">Q${idx + 1}. ${item.question}</p>
+                    <p class="mt-0.5">정답: <span class="font-semibold text-white">${item.correctAnswer}</span> ${item.isCorrect ? '⭕' : `(선택: ${item.userSelected}) ❌`}</p>
+                `;
+                reviewList.appendChild(div);
+            });
+
+            document.getElementById('resultModal').classList.remove('hidden');
+        }
+
+        function setupEventListeners() {
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                initStarfield();
+            });
+
+            // Keyboard listeners
+            window.addEventListener('keydown', (e) => {
+                if (keys.hasOwnProperty(e.code)) {
+                    keys[e.code] = true;
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (keys.hasOwnProperty(e.code)) {
+                    keys[e.code] = false;
+                }
+            });
+
+            // Touch / Mouse controls for direct ship dragging
+            canvas.addEventListener('touchstart', (e) => {
+                sound.init();
+                if (e.touches.length > 0) {
+                    touchX = e.touches[0].clientX;
+                }
+            }, { passive: true });
+
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 0) {
+                    touchX = e.touches[0].clientX;
+                }
+            }, { passive: true });
+
+            canvas.addEventListener('touchend', () => {
+                touchX = null;
+            });
+
+            // Canvas Click to shoot for desktop mouse users
+            canvas.addEventListener('mousedown', (e) => {
+                sound.init();
+                if (isPlaying && player) {
+                    player.shoot(performance.now());
+                }
+            });
+
+            // Mobile Onscreen Action Buttons
+            const btnLeft = document.getElementById('btnLeft');
+            const btnRight = document.getElementById('btnRight');
+            const btnShoot = document.getElementById('btnShoot');
+
+            btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowLeft = true; });
+            btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowLeft = false; });
+
+            btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowRight = true; });
+            btnRight.addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowRight = false; });
+
+            btnShoot.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                sound.init();
+                keys.Space = true;
+            });
+            btnShoot.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys.Space = false;
+            });
+
+            // UI Modal Buttons
+            document.getElementById('btnStartGame').addEventListener('click', startGame);
+            document.getElementById('btnRestartGame').addEventListener('click', startGame);
+
+            // Pause Button
+            const btnPause = document.getElementById('btnPause');
+            btnPause.addEventListener('click', () => {
+                if (!isPlaying) return;
+                isPaused = !isPaused;
+                document.getElementById('pauseIcon').className = isPaused ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+                document.getElementById('pauseModal').classList.toggle('hidden', !isPaused);
+                if (!isPaused) {
+                    animFrameId = requestAnimationFrame(gameLoop);
+                }
+            });
+
+            document.getElementById('btnResumeGame').addEventListener('click', () => {
+                isPaused = false;
+                document.getElementById('pauseIcon').className = 'fa-solid fa-pause';
+                document.getElementById('pauseModal').classList.add('hidden');
+                animFrameId = requestAnimationFrame(gameLoop);
+            });
+
+            // Sound Toggle Button
+            document.getElementById('btnSound').addEventListener('click', () => {
+                sound.muted = !sound.muted;
+                document.getElementById('soundIcon').className = sound.muted ? 'fa-solid fa-volume-xmark text-red-400' : 'fa-solid fa-volume-high text-slate-300';
+            });
+        }
+
+        // Initialize setup on page load
+        window.onload = function () {
+            resizeCanvas();
+            initStarfield();
+            setupEventListeners();
+        };
+    </script>
+</body>
+</html>
